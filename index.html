@@ -36,8 +36,13 @@
   window._deleteDoc = deleteDoc;
   window._firestoreReady = false;
 
-  // 인증 상태 변화 감지
+  // 인증 상태 변화 감지 (최초 1회: 로딩 화면 제거 후 앱/로그인 표시)
+  let authInitialized = false;
   onAuthStateChanged(auth, (user) => {
+    if (!authInitialized) {
+      authInitialized = true;
+      document.getElementById('loading-screen').style.display = 'none';
+    }
     if (user) {
       // 로그인 상태 → 앱 표시
       document.getElementById('login-screen').style.display = 'none';
@@ -64,6 +69,7 @@
       // 로그아웃 상태 → 로그인 화면
       document.getElementById('login-screen').style.display = 'flex';
       document.getElementById('app-screen').style.display = 'none';
+      document.getElementById('user-avatar').style.display = 'none';
       if (unsubscribeTasks) { unsubscribeTasks(); unsubscribeTasks = null; }
       window._firestoreReady = false;
       window._tasks = [];
@@ -216,8 +222,13 @@
   .clear-done-btn:hover { background:rgba(242,139,130,.1); color:var(--danger); border-color:var(--danger); }
   .clear-done-btn.visible { display:inline-block; }
 
+  /* ── 로딩 화면 ── */
+  #loading-screen { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:400; }
+  .loading-spinner { width:36px; height:36px; border:3px solid var(--divider); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
   /* ── 로그인 화면 ── */
-  #login-screen { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:300; }
+  #login-screen { position:fixed; inset:0; background:var(--bg); display:none; align-items:center; justify-content:center; z-index:300; }
   .login-box { background:var(--surface); border-radius:16px; padding:48px 40px; width:380px; max-width:92vw; box-shadow:0 8px 32px rgba(0,0,0,.5); display:flex; flex-direction:column; align-items:center; gap:0; }
   .login-logo { width:52px; height:52px; margin-bottom:16px; }
   .login-box h1 { font-size:1.8rem; font-weight:700; color:var(--text); margin-bottom:6px; }
@@ -253,6 +264,11 @@
 </style>
 </head>
 <body>
+
+<!-- 로딩 화면 (인증 상태 확인 중) -->
+<div id="loading-screen">
+  <div class="loading-spinner"></div>
+</div>
 
 <!-- 로그인 화면 -->
 <div id="login-screen">
