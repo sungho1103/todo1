@@ -70,10 +70,14 @@
   window._loginGoogle = () => signInWithRedirect(auth, _provider);
 
   // 리디렉션 결과 처리 (페이지 복귀 시 자동 로그인 완료)
-  getRedirectResult(auth).catch(err => {
+  getRedirectResult(auth).then(result => {
+    if (result && result.user) {
+      console.log('✅ 구글 로그인 성공(redirect):', result.user.displayName || result.user.email);
+    }
+  }).catch(err => {
     if (err && err.code !== 'auth/no-auth-event') {
-      console.error('구글 로그인 오류:', err.message);
-      alert('구글 로그인 실패: ' + err.message);
+      console.error('❌ 구글 로그인 오류:', err.code, err.message);
+      alert('구글 로그인 실패 (' + err.code + ')\n\n' + err.message);
     }
   });
   window._loginEmail = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
