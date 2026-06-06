@@ -116,8 +116,9 @@
   .font-ctrl span { font-size:.75rem; color:var(--text-muted); min-width:30px; text-align:center; }
 
   /* ── 히스토리 버튼 ── */
-  .history-btn { background:none; border:none; color:var(--text-muted); padding:6px; border-radius:6px; cursor:pointer; font-size:1.2rem; line-height:1; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:color .15s; }
+  .history-btn { background:none; border:none; color:var(--text-muted); padding:6px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:color .15s; position:relative; }
   .history-btn:hover { color:var(--text); }
+  .history-btn[data-count]:not([data-count=""])::after { content:attr(data-count); position:absolute; top:2px; right:2px; background:var(--text-muted); color:var(--bg); font-size:.55rem; font-weight:700; min-width:14px; height:14px; border-radius:7px; display:flex; align-items:center; justify-content:center; padding:0 3px; line-height:1; }
 
   /* ── 히스토리 모달 ── */
   .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200; align-items:center; justify-content:center; }
@@ -380,7 +381,10 @@ function render() {
   document.getElementById('badge-todo').textContent = todo.length;
   document.getElementById('badge-done').textContent = done.length;
   document.getElementById('clear-done-btn').classList.toggle('visible', done.length > 0);
-  document.getElementById('history-btn').textContent = archived.length > 0 ? `히스토리 (${archived.length})` : '히스토리';
+  // 히스토리 버튼 뱃지 (아이콘은 유지, 개수만 data-count로 표시)
+  const hBtn = document.getElementById('history-btn');
+  hBtn.dataset.count = archived.length > 0 ? archived.length : '';
+  hBtn.title = archived.length > 0 ? `히스토리 (${archived.length}건)` : '히스토리';
   renderList('list-todo', todo);
   renderList('list-done', done);
 }
