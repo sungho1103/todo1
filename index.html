@@ -7,7 +7,8 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-  import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
   const firebaseConfig = {
     apiKey: "AIzaSyDUZ2x-lbrOjquw8Op6O-ipDie8JTyaJak",
@@ -20,22 +21,54 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-
-  // Firestore 실시간 동기화
-  const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'));
-  onSnapshot(q, (snapshot) => {
-    window._tasks = snapshot.docs.map(d => ({ ...d.data(), _docId: d.id }));
-    if (window._renderFromFirestore) window._renderFromFirestore();
-  });
+  const auth = getAuth(app);
+  let unsubscribeTasks = null;
 
   // 전역 DB 함수 노출
-  window._db = db;
-  window._col = () => collection(db, 'tasks');
   window._addDoc = addDoc;
   window._updateDoc = updateDoc;
   window._deleteDoc = deleteDoc;
-  window._doc = (id) => doc(db, 'tasks', id);
-  window._firestoreReady = true;
+  window._firestoreReady = false;
+
+  // 인증 상태 변화 감지
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // 로그인 상태 → 앱 표시
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-screen').style.display = 'flex';
+      document.getElementById('user-name').textContent = user.displayName || user.email;
+      const avatar = user.photoURL;
+      if (avatar) {
+        document.getElementById('user-avatar').src = avatar;
+        document.getElementById('user-avatar').style.display = 'block';
+      }
+
+      // 사용자별 tasks 구독
+      if (unsubscribeTasks) unsubscribeTasks();
+      const userCol = collection(db, 'users', user.uid, 'tasks');
+      const q = query(userCol, orderBy('createdAt', 'desc'));
+      unsubscribeTasks = onSnapshot(q, (snapshot) => {
+        window._tasks = snapshot.docs.map(d => ({ ...d.data(), _docId: d.id }));
+        if (window._renderFromFirestore) window._renderFromFirestore();
+      });
+      window._col = () => collection(db, 'users', user.uid, 'tasks');
+      window._doc = (id) => doc(db, 'users', user.uid, 'tasks', id);
+      window._firestoreReady = true;
+    } else {
+      // 로그아웃 상태 → 로그인 화면
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app-screen').style.display = 'none';
+      if (unsubscribeTasks) { unsubscribeTasks(); unsubscribeTasks = null; }
+      window._firestoreReady = false;
+      window._tasks = [];
+    }
+  });
+
+  // 로그인/로그아웃 함수 노출
+  window._loginGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
+  window._loginEmail = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
+  window._signupEmail = (email, pw) => createUserWithEmailAndPassword(auth, email, pw);
+  window._logout = () => signOut(auth);
 </script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -150,6 +183,35 @@
   .clear-done-btn:hover { background:rgba(242,139,130,.1); color:var(--danger); border-color:var(--danger); }
   .clear-done-btn.visible { display:inline-block; }
 
+  /* ── 로그인 화면 ── */
+  #login-screen { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:300; }
+  .login-box { background:var(--surface); border-radius:16px; padding:48px 40px; width:380px; max-width:92vw; box-shadow:0 8px 32px rgba(0,0,0,.5); display:flex; flex-direction:column; align-items:center; gap:0; }
+  .login-logo { width:52px; height:52px; margin-bottom:16px; }
+  .login-box h1 { font-size:1.8rem; font-weight:700; color:var(--text); margin-bottom:6px; }
+  .login-box p { font-size:.9rem; color:var(--text-muted); margin-bottom:32px; }
+  .btn-google { width:100%; padding:12px; border-radius:8px; border:1px solid var(--divider); background:var(--surface2); color:var(--text); font-size:.95rem; font-family:inherit; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; transition:background .15s; margin-bottom:16px; }
+  .btn-google:hover { background:#35363a; border-color:var(--accent); }
+  .login-divider { width:100%; display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .login-divider::before,.login-divider::after { content:''; flex:1; height:1px; background:var(--divider); }
+  .login-divider span { font-size:.8rem; color:var(--text-muted); }
+  .login-input { width:100%; padding:11px 14px; border-radius:8px; border:1px solid var(--divider); background:var(--surface2); color:var(--text); font-size:.9rem; font-family:inherit; outline:none; margin-bottom:10px; }
+  .login-input:focus { border-color:var(--accent); }
+  .btn-email-login { width:100%; padding:12px; border-radius:8px; border:none; background:var(--accent); color:#202124; font-size:.95rem; font-weight:600; font-family:inherit; cursor:pointer; transition:background .15s; margin-bottom:10px; }
+  .btn-email-login:hover { background:var(--accent-hover); }
+  .login-switch { font-size:.82rem; color:var(--text-muted); cursor:pointer; text-align:center; }
+  .login-switch span { color:var(--accent); text-decoration:underline; cursor:pointer; }
+  .login-error { font-size:.82rem; color:var(--danger); text-align:center; min-height:18px; margin-top:-4px; margin-bottom:4px; }
+
+  /* ── 헤더 유저 정보 ── */
+  .user-info { display:flex; align-items:center; gap:8px; margin-left:16px; }
+  .user-info img { width:28px; height:28px; border-radius:50%; display:none; }
+  .user-info span { font-size:.82rem; color:var(--text-muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .btn-logout { background:none; border:1px solid var(--divider); color:var(--text-muted); font-size:.78rem; font-family:inherit; padding:4px 10px; border-radius:6px; cursor:pointer; transition:background .15s,color .15s; }
+  .btn-logout:hover { background:rgba(242,139,130,.1); color:var(--danger); border-color:var(--danger); }
+
+  /* 앱 화면 래퍼 */
+  #app-screen { flex-direction:column; flex:1; display:none; }
+
   /* scrollbar */
   .task-list::-webkit-scrollbar { width:6px; }
   .task-list::-webkit-scrollbar-track { background:transparent; }
@@ -159,6 +221,33 @@
 </head>
 <body>
 
+<!-- 로그인 화면 -->
+<div id="login-screen">
+  <div class="login-box">
+    <svg class="login-logo" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="11" fill="#8ab4f8"/>
+      <path d="M7 12.5l3.5 3.5 6.5-7" stroke="#202124" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>해치워</h1>
+    <p>오늘 할 일을 해치워버려요 💪</p>
+
+    <button class="btn-google" id="btn-google">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Google로 로그인
+    </button>
+
+    <div class="login-divider"><span>또는 이메일로</span></div>
+
+    <input class="login-input" type="email" id="login-email" placeholder="이메일">
+    <input class="login-input" type="password" id="login-pw" placeholder="비밀번호">
+    <div class="login-error" id="login-error"></div>
+    <button class="btn-email-login" id="btn-email-action">로그인</button>
+    <div class="login-switch" id="login-switch">계정이 없으신가요? <span id="switch-link">회원가입</span></div>
+  </div>
+</div>
+
+<!-- 앱 화면 -->
+<div id="app-screen">
 <header>
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="12" r="11" fill="#8ab4f8"/>
@@ -171,6 +260,11 @@
     <button id="font-up" title="글자 크게">+</button>
   </div>
   <button class="history-btn" id="history-btn">히스토리</button>
+  <div class="user-info">
+    <img id="user-avatar" src="" alt="">
+    <span id="user-name"></span>
+    <button class="btn-logout" id="btn-logout">로그아웃</button>
+  </div>
 </header>
 
 <!-- 히스토리 모달 -->
@@ -224,6 +318,7 @@
     </button>
   </div>
 </main>
+</div><!-- /app-screen -->
 
 <script>
 // ── 상태 ──
@@ -409,6 +504,46 @@ document.getElementById('add-btn').addEventListener('click', () => {
 document.addEventListener('click', e => {
   if (editingId && !e.target.closest('.task-item')) cancelEdit();
 });
+
+// ── 로그인 UI ──
+let isSignup = false;
+document.getElementById('btn-google').addEventListener('click', async () => {
+  try { await window._loginGoogle(); }
+  catch(e) { document.getElementById('login-error').textContent = '구글 로그인에 실패했습니다.'; }
+});
+document.getElementById('switch-link').addEventListener('click', () => {
+  isSignup = !isSignup;
+  document.getElementById('btn-email-action').textContent = isSignup ? '회원가입' : '로그인';
+  document.getElementById('login-switch').innerHTML = isSignup
+    ? '이미 계정이 있으신가요? <span id="switch-link">로그인</span>'
+    : '계정이 없으신가요? <span id="switch-link">회원가입</span>';
+  document.getElementById('switch-link').addEventListener('click', arguments.callee);
+  document.getElementById('login-error').textContent = '';
+});
+document.getElementById('btn-email-action').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-pw').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!email || !pw) { errEl.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
+  try {
+    if (isSignup) await window._signupEmail(email, pw);
+    else await window._loginEmail(email, pw);
+  } catch(e) {
+    const msg = {
+      'auth/user-not-found': '등록되지 않은 이메일입니다.',
+      'auth/wrong-password': '비밀번호가 틀렸습니다.',
+      'auth/email-already-in-use': '이미 사용 중인 이메일입니다.',
+      'auth/weak-password': '비밀번호는 6자리 이상이어야 합니다.',
+      'auth/invalid-email': '올바른 이메일 형식이 아닙니다.',
+      'auth/invalid-credential': '이메일 또는 비밀번호가 올바르지 않습니다.',
+    };
+    errEl.textContent = msg[e.code] || '로그인에 실패했습니다.';
+  }
+});
+document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('login-pw').focus(); });
+document.getElementById('login-pw').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('btn-email-action').click(); });
+document.getElementById('btn-logout').addEventListener('click', () => window._logout());
 
 // ── 히스토리 모달 ──
 function openHistory() {
