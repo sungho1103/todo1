@@ -8,7 +8,7 @@
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
   import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-  import { getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
   const firebaseConfig = {
     apiKey: "AIzaSyDUZ2x-lbrOjquw8Op6O-ipDie8JTyaJak",
@@ -64,22 +64,34 @@
     }
   });
 
-  // 로그인/로그아웃 함수 노출
-  // 인앱브라우저(카카오톡 등) 대응: disallowed_useragent 회피를 위해 redirect 사용
-  const _provider = new GoogleAuthProvider();
-  window._loginGoogle = () => signInWithRedirect(auth, _provider);
+  // 인앱브라우저 감지 (카카오톡, 인스타그램, 네이버 앱 등)
+  function isInAppBrowser() {
+    const ua = navigator.userAgent || '';
+    return /KAKAOTALK|Instagram|NAVER|Line|FB_IAB|FB4A|FBAN|Twitter|Snapchat|MicroMessenger/i.test(ua);
+  }
 
-  // 리디렉션 결과 처리 (페이지 복귀 시 자동 로그인 완료)
-  getRedirectResult(auth).then(result => {
-    if (result && result.user) {
-      console.log('✅ 구글 로그인 성공(redirect):', result.user.displayName || result.user.email);
+  const _provider = new GoogleAuthProvider();
+
+  window._loginGoogle = async () => {
+    // 인앱브라우저면 외부 브라우저로 유도
+    if (isInAppBrowser()) {
+      const msg = '카카오톡/인스타그램 등 앱 내 브라우저에서는\n구글 로그인이 차단됩니다.\n\n아래 방법 중 하나를 사용해주세요:\n• 우측 상단 메뉴 → "다른 브라우저로 열기"\n• Chrome 또는 Safari에서 직접 접속';
+      alert(msg);
+      return;
     }
-  }).catch(err => {
-    if (err && err.code !== 'auth/no-auth-event') {
-      console.error('❌ 구글 로그인 오류:', err.code, err.message);
-      alert('구글 로그인 실패 (' + err.code + ')\n\n' + err.message);
+    try {
+      await signInWithPopup(auth, _provider);
+    } catch (err) {
+      if (err.code === 'auth/popup-blocked') {
+        alert('팝업이 차단됐어요.\n브라우저 설정에서 팝업을 허용하거나\n이메일로 로그인해주세요.');
+      } else if (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user') {
+        // 사용자가 닫은 경우 - 무시
+      } else {
+        console.error('구글 로그인 오류:', err.code, err.message);
+        alert('구글 로그인 실패: ' + err.message);
+      }
     }
-  });
+  };
   window._loginEmail = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
   window._signupEmail = (email, pw) => createUserWithEmailAndPassword(auth, email, pw);
   window._logout = () => signOut(auth);
